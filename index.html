@@ -138,9 +138,9 @@
     }
     
     function swapSlots() {
-        const temp = slot1Color;
+        const tempColor = slot1Color;
         slot1Color = slot2Color;
-        slot2Color = temp;
+        slot2Color = tempColor;
         activeSlot = activeSlot === 1 ? 2 : 1;
         currentColor = activeSlot === 1 ? slot1Color : slot2Color;
         updateSlotsDisplay();
@@ -150,13 +150,17 @@
     function setSlot1() {
         slot1Color = currentColor;
         activeSlot = 1;
+        currentColor = slot1Color;
         updateSlotsDisplay();
+        updateActiveSwatch();
     }
     
     function setSlot2() {
         slot2Color = currentColor;
         activeSlot = 2;
+        currentColor = slot2Color;
         updateSlotsDisplay();
+        updateActiveSwatch();
     }
     
     function openColorPicker() {
@@ -192,9 +196,12 @@
     }
     
     function updateActiveSwatch() {
-        document.querySelectorAll(".color-swatch").forEach(el => {
+        const swatches = document.querySelectorAll(".color-swatch");
+        let found = false;
+        swatches.forEach(el => {
             if (el.style.backgroundColor === currentColor) {
                 el.classList.add("active");
+                found = true;
             } else {
                 el.classList.remove("active");
             }
