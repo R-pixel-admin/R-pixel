@@ -7,99 +7,18 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
-        * {
-            user-select: none;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            background: #0a0c12;
-            overflow: hidden;
-            font-family: monospace;
-        }
-        /* Контейнер для карты с зумом и панорамированием */
-        .map-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #0a0c12;
-        }
-        /* Трансформируемый холст */
-        .canvas-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            transform-origin: 0 0;
-            cursor: grab;
-        }
-        .canvas-wrapper:active {
-            cursor: grabbing;
-        }
-        .pixel-grid {
-            display: grid;
-            grid-template-columns: repeat(50, 20px);
-            background-color: #1e212b;
-            border: 1px solid #2e2f3e;
-        }
-        .pixel {
-            width: 20px;
-            height: 20px;
-            background-color: #2b2b2b;
-            cursor: pointer;
-        }
-        .pixel:hover {
-            filter: brightness(1.2);
-        }
-        /* Палитра */
-        .palette {
-            position: fixed;
-            bottom: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 8px;
-            padding: 8px 12px;
-            background: #1e1f2ccc;
-            backdrop-filter: blur(8px);
-            border-radius: 16px;
-            z-index: 100;
-        }
-        .color-swatch {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid #fff;
-        }
-        .color-swatch.active {
-            border: 3px solid #ff0;
-            transform: scale(1.05);
-        }
-        /* Инфо о зуме */
-        .zoom-info {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            background: #1e1f2ccc;
-            backdrop-filter: blur(8px);
-            padding: 4px 12px;
-            border-radius: 16px;
-            color: white;
-            font-size: 14px;
-            z-index: 100;
-            pointer-events: none;
-        }
-        @media (max-width: 600px) {
-            .color-swatch { width: 28px; height: 28px; }
-            .palette { gap: 6px; padding: 6px 10px; }
-            .pixel { width: 20px; height: 20px; }
-        }
+        * { user-select: none; margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0c12; overflow: hidden; font-family: monospace; }
+        .map-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0c12; }
+        .canvas-wrapper { position: absolute; top: 0; left: 0; transform-origin: 0 0; cursor: grab; }
+        .canvas-wrapper:active { cursor: grabbing; }
+        .pixel-grid { display: grid; grid-template-columns: repeat(50, 20px); background-color: #1e212b; border: 1px solid #2e2f3e; }
+        .pixel { width: 20px; height: 20px; background-color: #2b2b2b; }
+        .palette { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 8px 12px; background: #1e1f2ccc; backdrop-filter: blur(8px); border-radius: 16px; z-index: 100; pointer-events: auto; }
+        .color-swatch { width: 36px; height: 36px; border-radius: 8px; cursor: pointer; border: 2px solid #fff; }
+        .color-swatch.active { border: 3px solid #ff0; transform: scale(1.05); }
+        .zoom-info { position: fixed; top: 16px; right: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 16px; color: white; font-size: 14px; z-index: 100; pointer-events: none; }
+        @media (max-width: 600px) { .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } .pixel { width: 20px; height: 20px; } }
     </style>
 </head>
 <body>
@@ -140,7 +59,6 @@
     const mapContainer = document.getElementById("mapContainer");
     const zoomInfo = document.getElementById("zoomInfo");
     
-    // Панорамирование и зум
     let scale = 1;
     let translateX = 0;
     let translateY = 0;
@@ -150,33 +68,58 @@
     let lastTranslateX = 0;
     let lastTranslateY = 0;
     
+    // Для определения клика без движения
+    let dragStarted = false;
+    let hasMoved = false;
+    
     function updateTransform() {
         canvasWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
         zoomInfo.innerText = `zoom: ${scale.toFixed(1)}x`;
     }
     
-    // Обработчики для панорамирования
     function onMouseDown(e) {
+        // Только левая кнопка мыши (button === 0)
+        if (e.button !== 0) return;
+        
         isDragging = true;
+        dragStarted = true;
+        hasMoved = false;
         dragStartX = e.clientX - translateX;
         dragStartY = e.clientY - translateY;
+        lastTranslateX = translateX;
+        lastTranslateY = translateY;
         canvasWrapper.style.cursor = "grabbing";
         e.preventDefault();
+        e.stopPropagation();
     }
     
     function onMouseMove(e) {
         if (!isDragging) return;
-        translateX = e.clientX - dragStartX;
-        translateY = e.clientY - dragStartY;
+        
+        const newTranslateX = e.clientX - dragStartX;
+        const newTranslateY = e.clientY - dragStartY;
+        
+        // Проверяем, было ли движение
+        if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3)) {
+            hasMoved = true;
+        }
+        
+        translateX = newTranslateX;
+        translateY = newTranslateY;
         updateTransform();
     }
     
-    function onMouseUp() {
+    function onMouseUp(e) {
+        if (!isDragging) return;
         isDragging = false;
         canvasWrapper.style.cursor = "grab";
+        
+        // Если не было движения — это клик по пикселю (событие обработает сам пиксель)
+        // Ничего не делаем, пиксель сам отработает клик
+        dragStarted = false;
     }
     
-    // Зум колесиком мыши
+    // Зум колесиком
     function onWheel(e) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -185,7 +128,6 @@
         
         if (newScale === scale) return;
         
-        // Зум относительно позиции мыши
         const rect = mapContainer.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -204,26 +146,40 @@
         updateTransform();
     }
     
-    // Тач-события для мобилок
+    // Тач для мобилок (одним пальцем — перемещение)
     function onTouchStart(e) {
         if (e.touches.length === 1) {
             isDragging = true;
+            dragStarted = true;
+            hasMoved = false;
             dragStartX = e.touches[0].clientX - translateX;
             dragStartY = e.touches[0].clientY - translateY;
+            lastTranslateX = translateX;
+            lastTranslateY = translateY;
             e.preventDefault();
         }
     }
     
     function onTouchMove(e) {
         if (!isDragging || e.touches.length !== 1) return;
-        translateX = e.touches[0].clientX - dragStartX;
-        translateY = e.touches[0].clientY - dragStartY;
+        
+        const newTranslateX = e.touches[0].clientX - dragStartX;
+        const newTranslateY = e.touches[0].clientY - dragStartY;
+        
+        if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 5 || Math.abs(newTranslateY - lastTranslateY) > 5)) {
+            hasMoved = true;
+        }
+        
+        translateX = newTranslateX;
+        translateY = newTranslateY;
         updateTransform();
         e.preventDefault();
     }
     
-    function onTouchEnd() {
+    function onTouchEnd(e) {
         isDragging = false;
+        dragStarted = false;
+        e.preventDefault();
     }
     
     // Подключаем обработчики
@@ -235,9 +191,7 @@
     mapContainer.addEventListener("touchmove", onTouchMove);
     mapContainer.addEventListener("touchend", onTouchEnd);
     
-    // Функции для пикселей
     function getPixelId(row, col) { return `${row}_${col}`; }
-    
     function parseIdToCoords(id) { const [row, col] = id.split("_").map(Number); return { row, col }; }
     
     function renderFullGrid() {
@@ -254,7 +208,12 @@
                 pixel.style.height = `${PIXEL_SIZE}px`;
                 pixel.dataset.row = row;
                 pixel.dataset.col = col;
-                pixel.addEventListener("click", (e) => { e.stopPropagation(); onPixelClick(row, col); });
+                pixel.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    // Если было движение при драге — не красим
+                    if (hasMoved) return;
+                    onPixelClick(row, col);
+                });
                 gridContainer.appendChild(pixel);
             }
             gridRendered = true;
@@ -344,6 +303,7 @@
         buildPalette();
         loadInitialFromFirebase();
         updateTransform();
+        canvasWrapper.style.cursor = "grab";
     }
     
     window.addEventListener("DOMContentLoaded", init);
