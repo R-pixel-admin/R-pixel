@@ -18,7 +18,7 @@
         .color-swatch { width: 36px; height: 36px; border-radius: 8px; cursor: pointer; border: 2px solid #fff; }
         .color-swatch.active { border: 3px solid #ff0; transform: scale(1.05); }
         .zoom-info { position: fixed; top: 16px; right: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 16px; color: white; font-size: 14px; z-index: 100; pointer-events: none; }
-        @media (max-width: 600px) { .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } .pixel { width: 20px; height: 20px; } }
+        @media (max-width: 600px) { .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } }
     </style>
 </head>
 <body>
@@ -59,6 +59,7 @@
     const mapContainer = document.getElementById("mapContainer");
     const zoomInfo = document.getElementById("zoomInfo");
     
+    // Панорамирование (ЛКМ)
     let scale = 1;
     let translateX = 0;
     let translateY = 0;
@@ -67,65 +68,83 @@
     let dragStartY = 0;
     let lastTranslateX = 0;
     let lastTranslateY = 0;
-    
-    // Для определения клика без движения
-    let dragStarted = false;
     let hasMoved = false;
+    
+    // Рисование (ПКМ)
+    let isDrawing = false;
+    let lastPaintedPixel = null;
     
     function updateTransform() {
         canvasWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
         zoomInfo.innerText = `zoom: ${scale.toFixed(1)}x`;
     }
     
-    function onMouseDown(e) {
-        // Только левая кнопка мыши (button === 0)
-        if (e.button !== 0) return;
-        
-        isDragging = true;
-        dragStarted = true;
-        hasMoved = false;
-        dragStartX = e.clientX - translateX;
-        dragStartY = e.clientY - translateY;
-        lastTranslateX = translateX;
-        lastTranslateY = translateY;
-        canvasWrapper.style.cursor = "grabbing";
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    
-    function onMouseMove(e) {
-        if (!isDragging) return;
-        
-        const newTranslateX = e.clientX - dragStartX;
-        const newTranslateY = e.clientY - dragStartY;
-        
-        // Проверяем, было ли движение
-        if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3)) {
-            hasMoved = true;
-        }
-        
-        translateX = newTranslateX;
-        translateY = newTranslateY;
+    function centerCanvas() {
+        const gridWidth = SIZE * PIXEL_SIZE * scale;
+        const gridHeight = SIZE * PIXEL_SIZE * scale;
+        translateX = (window.innerWidth - gridWidth) / 2;
+        translateY = (window.innerHeight - gridHeight) / 2;
         updateTransform();
     }
     
-    function onMouseUp(e) {
-        if (!isDragging) return;
-        isDragging = false;
-        canvasWrapper.style.cursor = "grab";
-        
-        // Если не было движения — это клик по пикселю (событие обработает сам пиксель)
-        // Ничего не делаем, пиксель сам отработает клик
-        dragStarted = false;
+    // ЛКМ - панорамирование
+    function onMouseDown(e) {
+        if (e.button === 0) {
+            isDragging = true;
+            hasMoved = false;
+            dragStartX = e.clientX - translateX;
+            dragStartY = e.clientY - translateY;
+            lastTranslateX = translateX;
+            lastTranslateY = translateY;
+            canvasWrapper.style.cursor = "grabbing";
+            e.preventDefault();
+        }
     }
     
-    // Зум колесиком
+    function onMouseMove(e) {
+        if (isDragging) {
+            const newTranslateX = e.clientX - dragStartX;
+            const newTranslateY = e.clientY - dragStartY;
+            if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3)) {
+                hasMoved = true;
+            }
+            translateX = newTranslateX;
+            translateY = newTranslateY;
+            updateTransform();
+        }
+    }
+    
+    function onMouseUp(e) {
+        if (isDragging) {
+            isDragging = false;
+            canvasWrapper.style.cursor = "grab";
+        }
+        if (isDrawing) {
+            isDrawing = false;
+            lastPaintedPixel = null;
+        }
+    }
+    
+    // ПКМ - рисование
+    function onContextMenu(e) {
+        e.preventDefault();
+        return false;
+    }
+    
+    function onRightMouseDown(e) {
+        if (e.button === 2) {
+            isDrawing = true;
+            e.preventDefault();
+            return false;
+        }
+    }
+    
+    // Зум
     function onWheel(e) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
         let newScale = scale + delta;
         newScale = Math.min(Math.max(0.3, newScale), 3);
-        
         if (newScale === scale) return;
         
         const rect = mapContainer.getBoundingClientRect();
@@ -134,59 +153,78 @@
         
         const beforeX = (mouseX - translateX) / scale;
         const beforeY = (mouseY - translateY) / scale;
-        
         scale = newScale;
-        
         const afterX = (mouseX - translateX) / scale;
         const afterY = (mouseY - translateY) / scale;
         
         translateX += (afterX - beforeX) * scale;
         translateY += (afterY - beforeY) * scale;
-        
         updateTransform();
     }
     
-    // Тач для мобилок (одним пальцем — перемещение)
+    // Тач для мобилок
+    let touchStartDistance = 0;
+    let touchStartScale = 1;
+    
+    function getTouchDistance(touches) {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
     function onTouchStart(e) {
         if (e.touches.length === 1) {
             isDragging = true;
-            dragStarted = true;
             hasMoved = false;
             dragStartX = e.touches[0].clientX - translateX;
             dragStartY = e.touches[0].clientY - translateY;
             lastTranslateX = translateX;
             lastTranslateY = translateY;
             e.preventDefault();
+        } else if (e.touches.length === 2) {
+            isDragging = false;
+            touchStartDistance = getTouchDistance(e.touches);
+            touchStartScale = scale;
+            e.preventDefault();
         }
     }
     
     function onTouchMove(e) {
-        if (!isDragging || e.touches.length !== 1) return;
-        
-        const newTranslateX = e.touches[0].clientX - dragStartX;
-        const newTranslateY = e.touches[0].clientY - dragStartY;
-        
-        if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 5 || Math.abs(newTranslateY - lastTranslateY) > 5)) {
-            hasMoved = true;
+        if (e.touches.length === 1 && isDragging) {
+            const newTranslateX = e.touches[0].clientX - dragStartX;
+            const newTranslateY = e.touches[0].clientY - dragStartY;
+            if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 5 || Math.abs(newTranslateY - lastTranslateY) > 5)) {
+                hasMoved = true;
+            }
+            translateX = newTranslateX;
+            translateY = newTranslateY;
+            updateTransform();
+            e.preventDefault();
+        } else if (e.touches.length === 2) {
+            const newDistance = getTouchDistance(e.touches);
+            const newScale = touchStartScale * (newDistance / touchStartDistance);
+            scale = Math.min(Math.max(0.3, newScale), 3);
+            updateTransform();
+            e.preventDefault();
         }
-        
-        translateX = newTranslateX;
-        translateY = newTranslateY;
-        updateTransform();
-        e.preventDefault();
     }
     
     function onTouchEnd(e) {
         isDragging = false;
-        dragStarted = false;
+        if (isDrawing) {
+            isDrawing = false;
+            lastPaintedPixel = null;
+        }
         e.preventDefault();
     }
     
-    // Подключаем обработчики
     mapContainer.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    mapContainer.addEventListener("mousemove", onMouseMove);
+    mapContainer.addEventListener("mouseup", onMouseUp);
     mapContainer.addEventListener("wheel", onWheel, { passive: false });
+    mapContainer.addEventListener("contextmenu", onContextMenu);
+    mapContainer.addEventListener("mousedown", onRightMouseDown);
+    
     mapContainer.addEventListener("touchstart", onTouchStart);
     mapContainer.addEventListener("touchmove", onTouchMove);
     mapContainer.addEventListener("touchend", onTouchEnd);
@@ -208,12 +246,24 @@
                 pixel.style.height = `${PIXEL_SIZE}px`;
                 pixel.dataset.row = row;
                 pixel.dataset.col = col;
+                
                 pixel.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    // Если было движение при драге — не красим
                     if (hasMoved) return;
-                    onPixelClick(row, col);
+                    setPixelColor(row, col, currentColor);
                 });
+                
+                pixel.addEventListener("mouseenter", () => {
+                    if (isDrawing) {
+                        setPixelColor(row, col, currentColor);
+                    }
+                });
+                
+                pixel.addEventListener("touchstart", (e) => {
+                    e.stopPropagation();
+                    setPixelColor(row, col, currentColor);
+                });
+                
                 gridContainer.appendChild(pixel);
             }
             gridRendered = true;
@@ -275,13 +325,14 @@
     }
     
     async function setPixelColor(row, col, colorHex) {
-        updatePixelUI(row, col, colorHex);
         const pixelId = getPixelId(row, col);
+        const currentColorAtPixel = pixelData[row * SIZE + col];
+        if (currentColorAtPixel === colorHex) return;
+        
+        updatePixelUI(row, col, colorHex);
         const pixelRef = db.ref(`pixels/${pixelId}`);
         try { await pixelRef.set(colorHex); } catch (err) { console.warn(err); }
     }
-    
-    function onPixelClick(row, col) { setPixelColor(row, col, currentColor); }
     
     function buildPalette() {
         paletteDiv.innerHTML = "";
@@ -302,13 +353,11 @@
     function init() {
         buildPalette();
         loadInitialFromFirebase();
-        const gridWidth = SIZE * PIXEL_SIZE;
-        translateX = (window.innerWidth - gridWidth) / 2;
-        translateY = (window.innerHeight - gridWidth) / 2;
-        updateTransform();
+        centerCanvas();
         canvasWrapper.style.cursor = "grab";
     }
     
+    window.addEventListener("resize", () => centerCanvas());
     window.addEventListener("DOMContentLoaded", init);
 </script>
 </body>
