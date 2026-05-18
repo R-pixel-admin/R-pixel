@@ -47,7 +47,7 @@
     <span class="slot-label">🎨</span>
     <span id="slot1Color"></span> 1
     <span id="slot2Color"></span> 2
-    <span style="margin-left:6px">␣ свап | R палитра</span>
+    <span style="margin-left:6px">␣ переключить слот</span>
 </div>
 
 <div id="welcomeOverlay" class="welcome-overlay">
@@ -57,9 +57,9 @@
         <ul class="feature-list">
             <li>• <span>Клик — поставить пиксель</span></li>
             <li>• <span>ПКМ + вести — рисовать кистью</span></li>
-            <li>• <span><strong>1</strong> / <strong>2</strong> — сохранить цвет в слот</span></li>
-            <li>• <span><strong>Пробел</strong> — свап между слотами</span></li>
-            <li>• <span><strong>R</strong> — выбрать любой цвет</span></li>
+            <li>• <span><strong>1</strong> — сохранить цвет в слот 1</span></li>
+            <li>• <span><strong>2</strong> — сохранить цвет в слот 2</span></li>
+            <li>• <span><strong>Пробел</strong> — переключиться между слотами</span></li>
         </ul>
         <button class="close-btn" id="closeWelcome">ПРИСТУПИТЬ</button>
     </div>
@@ -137,10 +137,7 @@
         }
     }
     
-    function swapSlots() {
-        const tempColor = slot1Color;
-        slot1Color = slot2Color;
-        slot2Color = tempColor;
+    function switchSlot() {
         activeSlot = activeSlot === 1 ? 2 : 1;
         currentColor = activeSlot === 1 ? slot1Color : slot2Color;
         updateSlotsDisplay();
@@ -163,17 +160,6 @@
         updateActiveSwatch();
     }
     
-    function openColorPicker() {
-        const input = document.createElement("input");
-        input.type = "color";
-        input.value = currentColor;
-        input.addEventListener("input", (e) => {
-            currentColor = e.target.value;
-            updateActiveSwatch();
-        });
-        input.click();
-    }
-    
     function onKeyDown(e) {
         const key = e.key;
         
@@ -187,21 +173,15 @@
         }
         else if (key === ' ') {
             e.preventDefault();
-            swapSlots();
-        }
-        else if (key === 'r' || key === 'R') {
-            e.preventDefault();
-            openColorPicker();
+            switchSlot();
         }
     }
     
     function updateActiveSwatch() {
         const swatches = document.querySelectorAll(".color-swatch");
-        let found = false;
         swatches.forEach(el => {
             if (el.style.backgroundColor === currentColor) {
                 el.classList.add("active");
-                found = true;
             } else {
                 el.classList.remove("active");
             }
