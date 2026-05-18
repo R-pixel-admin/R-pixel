@@ -302,6 +302,9 @@
     function init() {
         buildPalette();
         loadInitialFromFirebase();
+        const gridWidth = SIZE * PIXEL_SIZE;
+        translateX = (window.innerWidth - gridWidth) / 2;
+        translateY = (window.innerHeight - gridWidth) / 2;
         updateTransform();
         canvasWrapper.style.cursor = "grab";
     }
