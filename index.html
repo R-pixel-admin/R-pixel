@@ -7,7 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
-        * { user-select: none; margin: 0; padding: 0; box-sizing: border-box; }
+        * { user-select: none; margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
         body { background: #0a0c12; overflow: hidden; font-family: monospace; }
         .map-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0c12; }
         .canvas-wrapper { position: absolute; top: 0; left: 0; transform-origin: 0 0; cursor: grab; }
@@ -18,9 +18,9 @@
         .color-swatch { width: 36px; height: 36px; border-radius: 8px; cursor: pointer; border: 2px solid #fff; }
         .color-swatch.active { border: 3px solid #ff0; transform: scale(1.05); }
         .zoom-info { position: fixed; top: 16px; right: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 16px; color: white; font-size: 14px; z-index: 100; pointer-events: none; }
-        .slot-info { position: fixed; bottom: 80px; left: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 16px; color: white; font-size: 12px; z-index: 100; font-family: monospace; }
-        .slot-info span { display: inline-block; width: 28px; height: 28px; border-radius: 6px; margin: 0 4px; vertical-align: middle; border: 2px solid #fff; }
-        .slot-info .slot-label { display: inline-block; margin: 0 6px 0 0; }
+        .slot-info { position: fixed; bottom: 80px; left: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 16px; color: white; font-size: 12px; z-index: 100; font-family: monospace; pointer-events: auto; }
+        .slot-info span { display: inline-block; width: 28px; height: 28px; border-radius: 6px; margin: 0 4px; vertical-align: middle; border: 2px solid #fff; cursor: pointer; }
+        .slot-info .slot-label { display: inline-block; margin: 0 6px 0 0; cursor: default; }
         .slot-info .active-slot { border: 2px solid #ff0; box-shadow: 0 0 6px #ff0; }
         .welcome-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 200; display: flex; justify-content: center; align-items: center; transition: opacity 0.3s ease; }
         .welcome-card { background: linear-gradient(135deg, #1e1f2c, #14161f); border-radius: 24px; padding: 24px 32px; max-width: 420px; text-align: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5); animation: popIn 0.4s cubic-bezier(0.34, 1.2, 0.64, 1); }
@@ -32,7 +32,7 @@
         .feature-list li span { color: #aaa; }
         .close-btn { background: #ff6600; border: none; color: white; padding: 12px 28px; border-radius: 40px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 16px; transition: all 0.2s; font-family: monospace; }
         .close-btn:hover { background: #ff4400; transform: scale(1.02); }
-        @media (max-width: 600px) { .welcome-card { margin: 20px; padding: 20px; } .welcome-card h2 { font-size: 24px; } .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } .pixel { width: 8px; height: 8px; } .pixel-grid { grid-template-columns: repeat(150, 8px); } .slot-info { bottom: 70px; left: 8px; font-size: 10px; } .slot-info span { width: 22px; height: 22px; } }
+        @media (max-width: 600px) { .welcome-card { margin: 20px; padding: 20px; } .welcome-card h2 { font-size: 24px; } .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } .pixel { width: 8px; height: 8px; } .pixel-grid { grid-template-columns: repeat(150, 8px); } .slot-info { display: none; } }
     </style>
 </head>
 <body>
@@ -45,9 +45,8 @@
 <div class="zoom-info" id="zoomInfo">zoom: 1x</div>
 <div class="slot-info" id="slotInfo">
     <span class="slot-label">🎨</span>
-    <span id="slot1Color"></span> 1
-    <span id="slot2Color"></span> 2
-    <span style="margin-left:6px">␣ переключить слот</span>
+    <span id="slot1Color"></span>
+    <span id="slot2Color"></span>
 </div>
 
 <div id="welcomeOverlay" class="welcome-overlay">
@@ -57,9 +56,8 @@
         <ul class="feature-list">
             <li>• <span>Клик — поставить пиксель</span></li>
             <li>• <span>ПКМ + вести — рисовать кистью</span></li>
-            <li>• <span><strong>1</strong> — сохранить цвет в слот 1</span></li>
-            <li>• <span><strong>2</strong> — сохранить цвет в слот 2</span></li>
-            <li>• <span><strong>Пробел</strong> — переключиться между слотами</span></li>
+            <li>• <span>Нажми на квадратик слева — сохранить цвет в слот</span></li>
+            <li>• <span>Пробел или тап по слоту — переключиться</span></li>
         </ul>
         <button class="close-btn" id="closeWelcome">ПРИСТУПИТЬ</button>
     </div>
@@ -112,6 +110,9 @@
     let hasMoved = false;
     let isDrawing = false;
     
+    let touchStartTime = 0;
+    let touchMoved = false;
+    
     function updateTransform() {
         canvasWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
         zoomInfo.innerText = `zoom: ${scale.toFixed(1)}x`;
@@ -162,29 +163,16 @@
     
     function onKeyDown(e) {
         const key = e.key;
-        
-        if (key === '1') {
-            e.preventDefault();
-            setSlot1();
-        }
-        else if (key === '2') {
-            e.preventDefault();
-            setSlot2();
-        }
-        else if (key === ' ') {
-            e.preventDefault();
-            switchSlot();
-        }
+        if (key === '1') { e.preventDefault(); setSlot1(); }
+        else if (key === '2') { e.preventDefault(); setSlot2(); }
+        else if (key === ' ') { e.preventDefault(); switchSlot(); }
     }
     
     function updateActiveSwatch() {
         const swatches = document.querySelectorAll(".color-swatch");
         swatches.forEach(el => {
-            if (el.style.backgroundColor === currentColor) {
-                el.classList.add("active");
-            } else {
-                el.classList.remove("active");
-            }
+            if (el.style.backgroundColor === currentColor) el.classList.add("active");
+            else el.classList.remove("active");
         });
     }
     
@@ -205,9 +193,7 @@
         if (isDragging) {
             const newTranslateX = e.clientX - dragStartX;
             const newTranslateY = e.clientY - dragStartY;
-            if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3)) {
-                hasMoved = true;
-            }
+            if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3)) hasMoved = true;
             translateX = newTranslateX;
             translateY = newTranslateY;
             updateTransform();
@@ -222,18 +208,8 @@
         if (isDrawing) isDrawing = false;
     }
     
-    function onContextMenu(e) {
-        e.preventDefault();
-        return false;
-    }
-    
-    function onRightMouseDown(e) {
-        if (e.button === 2) {
-            isDrawing = true;
-            e.preventDefault();
-            return false;
-        }
-    }
+    function onContextMenu(e) { e.preventDefault(); return false; }
+    function onRightMouseDown(e) { if (e.button === 2) { isDrawing = true; e.preventDefault(); return false; } }
     
     function onWheel(e) {
         e.preventDefault();
@@ -241,17 +217,14 @@
         let newScale = scale + delta;
         newScale = Math.min(Math.max(0.3, newScale), 3);
         if (newScale === scale) return;
-        
         const rect = mapContainer.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        
         const beforeX = (mouseX - translateX) / scale;
         const beforeY = (mouseY - translateY) / scale;
         scale = newScale;
         const afterX = (mouseX - translateX) / scale;
         const afterY = (mouseY - translateY) / scale;
-        
         translateX += (afterX - beforeX) * scale;
         translateY += (afterY - beforeY) * scale;
         updateTransform();
@@ -259,6 +232,7 @@
     
     let touchStartDistance = 0;
     let touchStartScale = 1;
+    let initialPinchX = 0, initialPinchY = 0;
     
     function getTouchDistance(touches) {
         const dx = touches[0].clientX - touches[1].clientX;
@@ -266,47 +240,85 @@
         return Math.sqrt(dx * dx + dy * dy);
     }
     
+    function getTouchCenter(touches) {
+        return {
+            x: (touches[0].clientX + touches[1].clientX) / 2,
+            y: (touches[0].clientY + touches[1].clientY) / 2
+        };
+    }
+    
     function onTouchStart(e) {
+        e.preventDefault();
         if (e.touches.length === 1) {
             isDragging = true;
-            hasMoved = false;
+            touchMoved = false;
+            touchStartTime = Date.now();
             dragStartX = e.touches[0].clientX - translateX;
             dragStartY = e.touches[0].clientY - translateY;
             lastTranslateX = translateX;
             lastTranslateY = translateY;
-            e.preventDefault();
         } else if (e.touches.length === 2) {
             isDragging = false;
             touchStartDistance = getTouchDistance(e.touches);
             touchStartScale = scale;
-            e.preventDefault();
+            const center = getTouchCenter(e.touches);
+            initialPinchX = (center.x - translateX) / scale;
+            initialPinchY = (center.y - translateY) / scale;
         }
     }
     
     function onTouchMove(e) {
+        e.preventDefault();
         if (e.touches.length === 1 && isDragging) {
             const newTranslateX = e.touches[0].clientX - dragStartX;
             const newTranslateY = e.touches[0].clientY - dragStartY;
-            if (!hasMoved && (Math.abs(newTranslateX - lastTranslateX) > 5 || Math.abs(newTranslateY - lastTranslateY) > 5)) {
-                hasMoved = true;
-            }
+            const dx = Math.abs(newTranslateX - lastTranslateX);
+            const dy = Math.abs(newTranslateY - lastTranslateY);
+            if (dx > 5 || dy > 5) touchMoved = true;
             translateX = newTranslateX;
             translateY = newTranslateY;
             updateTransform();
-            e.preventDefault();
         } else if (e.touches.length === 2) {
             const newDistance = getTouchDistance(e.touches);
-            const newScale = touchStartScale * (newDistance / touchStartDistance);
-            scale = Math.min(Math.max(0.3, newScale), 3);
-            updateTransform();
-            e.preventDefault();
+            if (touchStartDistance > 0) {
+                let newScale = touchStartScale * (newDistance / touchStartDistance);
+                newScale = Math.min(Math.max(0.3, newScale), 3);
+                if (newScale !== scale) {
+                    const center = getTouchCenter(e.touches);
+                    const beforeX = (center.x - translateX) / scale;
+                    const beforeY = (center.y - translateY) / scale;
+                    scale = newScale;
+                    const afterX = (center.x - translateX) / scale;
+                    const afterY = (center.y - translateY) / scale;
+                    translateX += (afterX - beforeX) * scale;
+                    translateY += (afterY - beforeY) * scale;
+                    updateTransform();
+                }
+            }
         }
     }
     
     function onTouchEnd(e) {
+        e.preventDefault();
+        const wasDragging = isDragging;
         isDragging = false;
         if (isDrawing) isDrawing = false;
-        e.preventDefault();
+        if (wasDragging && !touchMoved && Date.now() - touchStartTime < 200) {
+            const lastTouch = e.changedTouches[0];
+            if (lastTouch) {
+                const elements = document.elementsFromPoint(lastTouch.clientX, lastTouch.clientY);
+                for (let el of elements) {
+                    if (el.classList && el.classList.contains('pixel')) {
+                        const row = parseInt(el.dataset.row);
+                        const col = parseInt(el.dataset.col);
+                        if (!isNaN(row) && !isNaN(col)) setPixelColor(row, col, currentColor);
+                        break;
+                    }
+                }
+            }
+        }
+        touchMoved = false;
+        touchStartDistance = 0;
     }
     
     mapContainer.addEventListener("mousedown", onMouseDown);
@@ -315,9 +327,10 @@
     mapContainer.addEventListener("wheel", onWheel, { passive: false });
     mapContainer.addEventListener("contextmenu", onContextMenu);
     mapContainer.addEventListener("mousedown", onRightMouseDown);
-    mapContainer.addEventListener("touchstart", onTouchStart);
-    mapContainer.addEventListener("touchmove", onTouchMove);
+    mapContainer.addEventListener("touchstart", onTouchStart, { passive: false });
+    mapContainer.addEventListener("touchmove", onTouchMove, { passive: false });
     mapContainer.addEventListener("touchend", onTouchEnd);
+    mapContainer.addEventListener("touchcancel", onTouchEnd);
     window.addEventListener("keydown", onKeyDown);
     
     function getPixelId(row, col) { return `${row}_${col}`; }
@@ -346,11 +359,6 @@
                 
                 pixel.addEventListener("mouseenter", () => {
                     if (isDrawing) setPixelColor(row, col, currentColor);
-                });
-                
-                pixel.addEventListener("touchstart", (e) => {
-                    e.stopPropagation();
-                    setPixelColor(row, col, currentColor);
                 });
                 
                 gridContainer.appendChild(pixel);
@@ -456,6 +464,9 @@
         canvasWrapper.style.cursor = "grab";
         initWelcomePopup();
         updateSlotsDisplay();
+        
+        slot1Span.addEventListener('click', () => setSlot1());
+        slot2Span.addEventListener('click', () => setSlot2());
     }
     
     window.addEventListener("resize", () => centerCanvas());
