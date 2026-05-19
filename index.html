@@ -149,10 +149,10 @@
         cooldownTimer.innerText = remaining;
     }
     
-    function startCooldown() {
+    function startCooldownWithRemaining(remainingSeconds) {
         if (cooldownInterval) clearInterval(cooldownInterval);
         isOnCooldown = true;
-        let remaining = COOLDOWN_SECONDS;
+        let remaining = remainingSeconds;
         cooldownWrapper.style.display = "block";
         updateCooldownBar(remaining);
         
@@ -164,8 +164,28 @@
                 cooldownInterval = null;
                 isOnCooldown = false;
                 cooldownWrapper.style.display = "none";
+                localStorage.removeItem('cooldownEnd');
             }
         }, 1000);
+    }
+    
+    function startCooldown() {
+        const endTime = Date.now() + COOLDOWN_SECONDS * 1000;
+        localStorage.setItem('cooldownEnd', endTime);
+        startCooldownWithRemaining(COOLDOWN_SECONDS);
+    }
+    
+    function checkCooldownOnLoad() {
+        const savedEndTime = localStorage.getItem('cooldownEnd');
+        if (savedEndTime) {
+            const remainingMs = parseInt(savedEndTime) - Date.now();
+            if (remainingMs > 0) {
+                const remainingSeconds = Math.ceil(remainingMs / 1000);
+                startCooldownWithRemaining(Math.min(remainingSeconds, COOLDOWN_SECONDS));
+            } else {
+                localStorage.removeItem('cooldownEnd');
+            }
+        }
     }
     
     function updateTransform() {
@@ -577,7 +597,7 @@
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
-                <li>• <span>⏱️ 10 секунд между покрасками</span></li>
+                <li>• <span>⏱️ 10 секунд между покрасками (сохраняется после перезагрузки)</span></li>
             `;
         } else {
             featuresHtml = `
@@ -588,7 +608,7 @@
                 <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
                 <li>• <span>Пробел — переключить слот</span></li>
                 <li>• <span>Клик по цвету в палитре — выбрать цвет</span></li>
-                <li>• <span>⏱️ 10 секунд между покрасками</span></li>
+                <li>• <span>⏱️ 10 секунд между покрасками (сохраняется после перезагрузки)</span></li>
             `;
         }
         featureList.innerHTML = featuresHtml;
@@ -608,6 +628,7 @@
         canvasWrapper.style.cursor = "grab";
         initWelcomePopup();
         updateSlotsDisplay();
+        checkCooldownOnLoad();
         
         slot1Span.addEventListener('click', () => setSlot1());
         slot2Span.addEventListener('click', () => setSlot2());
