@@ -32,6 +32,10 @@
         .feature-list li span { color: #ccc; }
         .close-btn { background: #ff6600; border: none; color: white; padding: 12px 28px; border-radius: 40px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 16px; transition: all 0.2s; font-family: monospace; }
         .close-btn:hover { background: #ff4400; transform: scale(1.02); }
+        .cooldown-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); z-index: 300; display: flex; justify-content: center; align-items: center; flex-direction: column; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
+        .cooldown-overlay.active { opacity: 1; pointer-events: auto; }
+        .cooldown-timer { font-size: 120px; font-weight: bold; color: #ff6600; text-shadow: 0 0 20px rgba(255,102,0,0.5); font-family: monospace; letter-spacing: 10px; }
+        .cooldown-text { font-size: 24px; color: white; margin-top: 20px; font-family: monospace; }
         @media (max-width: 600px) { 
             .welcome-card { margin: 20px; padding: 20px; } 
             .welcome-card h2 { font-size: 24px; } 
@@ -40,6 +44,8 @@
             .pixel { width: 8px; height: 8px; } 
             .pixel-grid { grid-template-columns: repeat(150, 8px); } 
             .slot-info { display: none; } 
+            .cooldown-timer { font-size: 80px; letter-spacing: 5px; }
+            .cooldown-text { font-size: 18px; }
         }
     </style>
 </head>
@@ -68,6 +74,11 @@
     </div>
 </div>
 
+<div id="cooldownOverlay" class="cooldown-overlay">
+    <div class="cooldown-timer" id="cooldownTimer">10</div>
+    <div class="cooldown-text">секунд до следующей покраски</div>
+</div>
+
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyA-ebYwVRC_1XC4TQ9Xv04eD8Gcsj8gb2A",
@@ -86,6 +97,7 @@
     const SIZE = 150;
     const TOTAL_PIXELS = SIZE * SIZE;
     const PIXEL_SIZE = window.innerWidth <= 600 ? 8 : 12;
+    const COOLDOWN_SECONDS = 10;
     const COLOR_PALETTE = ["#2b2b2b","#8b3c2c","#d64531","#e8b84c","#6aa84f","#3b6e4b","#2c5e6e","#4c76b0","#6f4f8c","#bc85a3","#d4c4a8","#f7f3e0"];
     let pixelData = new Array(TOTAL_PIXELS).fill(COLOR_PALETTE[0]);
     let currentColor = COLOR_PALETTE[1];
@@ -95,6 +107,8 @@
     let activeSlot = 1;
     
     let gridRendered = false;
+    let isOnCooldown = false;
+    let cooldownInterval = null;
     
     const gridContainer = document.getElementById("pixelGrid");
     const paletteDiv = document.getElementById("colorPalette");
@@ -103,6 +117,8 @@
     const zoomInfo = document.getElementById("zoomInfo");
     const slot1Span = document.getElementById("slot1Color");
     const slot2Span = document.getElementById("slot2Color");
+    const cooldownOverlay = document.getElementById("cooldownOverlay");
+    const cooldownTimerEl = document.getElementById("cooldownTimer");
     
     let scale = 1;
     let translateX = 0;
@@ -119,12 +135,28 @@
     let touchMoved = false;
     let touchStartX = 0, touchStartY = 0;
     let lastTapTime = 0;
-    let tapDebounce = 100; // мс
-    let longPressTimer = null;
-    let isLongPressing = false;
+    let tapDebounce = 100;
     
-    // Определяем устройство
     const isMobile = window.innerWidth <= 600 || ('ontouchstart' in window);
+    
+    function startCooldown() {
+        if (cooldownInterval) clearInterval(cooldownInterval);
+        isOnCooldown = true;
+        let remaining = COOLDOWN_SECONDS;
+        cooldownTimerEl.innerText = remaining;
+        cooldownOverlay.classList.add("active");
+        
+        cooldownInterval = setInterval(() => {
+            remaining--;
+            cooldownTimerEl.innerText = remaining;
+            if (remaining <= 0) {
+                clearInterval(cooldownInterval);
+                cooldownInterval = null;
+                isOnCooldown = false;
+                cooldownOverlay.classList.remove("active");
+            }
+        }, 1000);
+    }
     
     function updateTransform() {
         canvasWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
@@ -378,9 +410,7 @@
         isDragging = false;
         isDrawing = false;
         
-        // Короткий тап (не было движения)
         if (wasDragging && !touchMoved && (now - touchStartTime) < 200) {
-            // Debounce: не чаще чем раз в 100мс
             if (now - lastTapTime > tapDebounce) {
                 const pixel = getPixelUnderTouch(touchStartX, touchStartY);
                 if (pixel) {
@@ -497,12 +527,16 @@
     }
     
     async function setPixelColor(row, col, colorHex) {
+        if (isOnCooldown) return;
+        
         const pixelId = getPixelId(row, col);
         const currentColorAtPixel = pixelData[row * SIZE + col];
         if (currentColorAtPixel === colorHex) return;
+        
         updatePixelUI(row, col, colorHex);
-        const pixelRef = db.ref(`pixels/${pixelId}`);
-        try { await pixelRef.set(colorHex); } catch (err) { console.warn(err); }
+        try { await db.ref(`pixels/${pixelId}`).set(colorHex); } catch(err) { console.warn(err); }
+        
+        startCooldown();
     }
     
     function buildPalette() {
@@ -533,16 +567,18 @@
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
+                <li>• <span>⏱️ 10 секунд кулдаун между покрасками</span></li>
             `;
         } else {
             featuresHtml = `
                 <li>• <span>ЛКМ + тащить — перемещать карту</span></li>
                 <li>• <span>Клик по пикселю — поставить цвет</span></li>
-                <li>• <span>ПКМ + вести — рисовать кистью (первый пиксель сразу красится)</span></li>
+                <li>• <span>ПКМ + вести — рисовать кистью</span></li>
                 <li>• <span>Колёсико мыши — приближать/отдалять</span></li>
                 <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
                 <li>• <span>Пробел — переключить слот</span></li>
                 <li>• <span>Клик по цвету в палитре — выбрать цвет</span></li>
+                <li>• <span>⏱️ 10 секунд кулдаун между покрасками</span></li>
             `;
         }
         featureList.innerHTML = featuresHtml;
