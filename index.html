@@ -118,6 +118,8 @@
     let touchStartTime = 0;
     let touchMoved = false;
     let touchStartX = 0, touchStartY = 0;
+    let lastTapTime = 0;
+    let tapDebounce = 100; // мс
     let longPressTimer = null;
     let isLongPressing = false;
     
@@ -210,7 +212,6 @@
             translateY = newTranslateY;
             updateTransform();
         } else if (isDrawing && !isMobile) {
-            // Рисование кистью при движении с зажатым ПКМ
             const elements = document.elementsFromPoint(e.clientX, e.clientY);
             for (let el of elements) {
                 if (el.classList && el.classList.contains('pixel')) {
@@ -239,7 +240,6 @@
         if (isMobile) return;
         if (e.button === 2) {
             isDrawing = true;
-            // Сразу красим пиксель под курсором
             const elements = document.elementsFromPoint(e.clientX, e.clientY);
             for (let el of elements) {
                 if (el.classList && el.classList.contains('pixel')) {
@@ -292,7 +292,6 @@
         };
     }
     
-    // Получить пиксель под пальцем
     function getPixelUnderTouch(clientX, clientY) {
         const elements = document.elementsFromPoint(clientX, clientY);
         for (let el of elements) {
@@ -305,31 +304,8 @@
         return null;
     }
     
-    function startLongPress(x, y) {
-        longPressTimer = setTimeout(() => {
-            isLongPressing = true;
-            isDragging = false;
-            touchMoved = false;
-            const pixel = getPixelUnderTouch(touchStartX, touchStartY);
-            if (pixel) {
-                setPixelColor(pixel.row, pixel.col, currentColor);
-                isDrawing = true;
-            }
-        }, 150);
-    }
-    
-    function cancelLongPress() {
-        if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-        isLongPressing = false;
-        isDrawing = false;
-    }
-    
     function onTouchStart(e) {
         e.preventDefault();
-        cancelLongPress();
         
         if (e.touches.length === 1) {
             touchStartX = e.touches[0].clientX;
@@ -341,11 +317,7 @@
             dragStartY = e.touches[0].clientY - translateY;
             lastTranslateX = translateX;
             lastTranslateY = translateY;
-            
-            // Запускаем таймер для длинного нажатия
-            startLongPress(touchStartX, touchStartY);
         } else if (e.touches.length === 2) {
-            cancelLongPress();
             isDragging = false;
             isDrawing = false;
             touchStartDistance = getTouchDistance(e.touches);
@@ -359,40 +331,22 @@
     function onTouchMove(e) {
         e.preventDefault();
         
-        if (e.touches.length === 1) {
+        if (e.touches.length === 1 && isDragging) {
             const currentX = e.touches[0].clientX;
             const currentY = e.touches[0].clientY;
             const dx = Math.abs(currentX - touchStartX);
             const dy = Math.abs(currentY - touchStartY);
             
-            // Если палец сильно сдвинулся во время длинного нажатия - отменяем режим рисования
-            if (dx > 8 || dy > 8) {
-                if (longPressTimer) {
-                    cancelLongPress();
-                    isDragging = true;
-                }
+            if (dx > 5 || dy > 5) {
+                touchMoved = true;
             }
             
-            if (isDrawing && !isDragging) {
-                // Режим рисования кистью
-                const pixel = getPixelUnderTouch(currentX, currentY);
-                if (pixel) {
-                    setPixelColor(pixel.row, pixel.col, currentColor);
-                }
-                e.preventDefault();
-            } else if (isDragging && !isDrawing && !longPressTimer) {
-                // Режим перемещения
-                const newTranslateX = e.touches[0].clientX - dragStartX;
-                const newTranslateY = e.touches[0].clientY - dragStartY;
-                if (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3) {
-                    touchMoved = true;
-                }
-                translateX = newTranslateX;
-                translateY = newTranslateY;
-                updateTransform();
-            }
+            const newTranslateX = e.touches[0].clientX - dragStartX;
+            const newTranslateY = e.touches[0].clientY - dragStartY;
+            translateX = newTranslateX;
+            translateY = newTranslateY;
+            updateTransform();
         } else if (e.touches.length === 2) {
-            cancelLongPress();
             if (isDrawing) isDrawing = false;
             isDragging = false;
             
@@ -419,18 +373,20 @@
         e.preventDefault();
         
         const wasDragging = isDragging;
-        const wasDrawing = isDrawing;
-        const wasLongPress = isLongPressing;
+        const now = Date.now();
         
-        cancelLongPress();
         isDragging = false;
         isDrawing = false;
         
-        // Короткий тап (не было движения, не было длинного нажатия)
-        if (wasDragging && !touchMoved && !wasLongPress && Date.now() - touchStartTime < 200) {
-            const pixel = getPixelUnderTouch(touchStartX, touchStartY);
-            if (pixel) {
-                setPixelColor(pixel.row, pixel.col, currentColor);
+        // Короткий тап (не было движения)
+        if (wasDragging && !touchMoved && (now - touchStartTime) < 200) {
+            // Debounce: не чаще чем раз в 100мс
+            if (now - lastTapTime > tapDebounce) {
+                const pixel = getPixelUnderTouch(touchStartX, touchStartY);
+                if (pixel) {
+                    setPixelColor(pixel.row, pixel.col, currentColor);
+                    lastTapTime = now;
+                }
             }
         }
         
@@ -573,8 +529,7 @@
         let featuresHtml = '';
         if (isMobile) {
             featuresHtml = `
-                <li>• <span>Короткий тап — поставить пиксель</span></li>
-                <li>• <span>Зажми палец и веди — рисовать кистью</span></li>
+                <li>• <span>Тап по пикселю — поставить цвет</span></li>
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
