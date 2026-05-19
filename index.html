@@ -117,6 +117,9 @@
     
     let touchStartTime = 0;
     let touchMoved = false;
+    let touchStartX = 0, touchStartY = 0;
+    let longPressTimer = null;
+    let isLongPressing = false;
     
     // Определяем устройство
     const isMobile = window.innerWidth <= 600 || ('ontouchstart' in window);
@@ -206,6 +209,19 @@
             translateX = newTranslateX;
             translateY = newTranslateY;
             updateTransform();
+        } else if (isDrawing && !isMobile) {
+            // Рисование кистью при движении с зажатым ПКМ
+            const elements = document.elementsFromPoint(e.clientX, e.clientY);
+            for (let el of elements) {
+                if (el.classList && el.classList.contains('pixel')) {
+                    const row = parseInt(el.dataset.row);
+                    const col = parseInt(el.dataset.col);
+                    if (!isNaN(row) && !isNaN(col)) {
+                        setPixelColor(row, col, currentColor);
+                    }
+                    break;
+                }
+            }
         }
     }
     
@@ -221,7 +237,23 @@
     
     function onRightMouseDown(e) {
         if (isMobile) return;
-        if (e.button === 2) { isDrawing = true; e.preventDefault(); return false; }
+        if (e.button === 2) {
+            isDrawing = true;
+            // Сразу красим пиксель под курсором
+            const elements = document.elementsFromPoint(e.clientX, e.clientY);
+            for (let el of elements) {
+                if (el.classList && el.classList.contains('pixel')) {
+                    const row = parseInt(el.dataset.row);
+                    const col = parseInt(el.dataset.col);
+                    if (!isNaN(row) && !isNaN(col)) {
+                        setPixelColor(row, col, currentColor);
+                    }
+                    break;
+                }
+            }
+            e.preventDefault();
+            return false;
+        }
     }
     
     function onWheel(e) {
@@ -260,9 +292,48 @@
         };
     }
     
+    // Получить пиксель под пальцем
+    function getPixelUnderTouch(clientX, clientY) {
+        const elements = document.elementsFromPoint(clientX, clientY);
+        for (let el of elements) {
+            if (el.classList && el.classList.contains('pixel')) {
+                const row = parseInt(el.dataset.row);
+                const col = parseInt(el.dataset.col);
+                if (!isNaN(row) && !isNaN(col)) return { row, col, element: el };
+            }
+        }
+        return null;
+    }
+    
+    function startLongPress(x, y) {
+        longPressTimer = setTimeout(() => {
+            isLongPressing = true;
+            isDragging = false;
+            touchMoved = false;
+            const pixel = getPixelUnderTouch(touchStartX, touchStartY);
+            if (pixel) {
+                setPixelColor(pixel.row, pixel.col, currentColor);
+                isDrawing = true;
+            }
+        }, 150);
+    }
+    
+    function cancelLongPress() {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+        isLongPressing = false;
+        isDrawing = false;
+    }
+    
     function onTouchStart(e) {
         e.preventDefault();
+        cancelLongPress();
+        
         if (e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
             isDragging = true;
             touchMoved = false;
             touchStartTime = Date.now();
@@ -270,8 +341,13 @@
             dragStartY = e.touches[0].clientY - translateY;
             lastTranslateX = translateX;
             lastTranslateY = translateY;
+            
+            // Запускаем таймер для длинного нажатия
+            startLongPress(touchStartX, touchStartY);
         } else if (e.touches.length === 2) {
+            cancelLongPress();
             isDragging = false;
+            isDrawing = false;
             touchStartDistance = getTouchDistance(e.touches);
             touchStartScale = scale;
             const center = getTouchCenter(e.touches);
@@ -282,16 +358,44 @@
     
     function onTouchMove(e) {
         e.preventDefault();
-        if (e.touches.length === 1 && isDragging) {
-            const newTranslateX = e.touches[0].clientX - dragStartX;
-            const newTranslateY = e.touches[0].clientY - dragStartY;
-            const dx = Math.abs(newTranslateX - lastTranslateX);
-            const dy = Math.abs(newTranslateY - lastTranslateY);
-            if (dx > 5 || dy > 5) touchMoved = true;
-            translateX = newTranslateX;
-            translateY = newTranslateY;
-            updateTransform();
+        
+        if (e.touches.length === 1) {
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const dx = Math.abs(currentX - touchStartX);
+            const dy = Math.abs(currentY - touchStartY);
+            
+            // Если палец сильно сдвинулся во время длинного нажатия - отменяем режим рисования
+            if (dx > 8 || dy > 8) {
+                if (longPressTimer) {
+                    cancelLongPress();
+                    isDragging = true;
+                }
+            }
+            
+            if (isDrawing && !isDragging) {
+                // Режим рисования кистью
+                const pixel = getPixelUnderTouch(currentX, currentY);
+                if (pixel) {
+                    setPixelColor(pixel.row, pixel.col, currentColor);
+                }
+                e.preventDefault();
+            } else if (isDragging && !isDrawing && !longPressTimer) {
+                // Режим перемещения
+                const newTranslateX = e.touches[0].clientX - dragStartX;
+                const newTranslateY = e.touches[0].clientY - dragStartY;
+                if (Math.abs(newTranslateX - lastTranslateX) > 3 || Math.abs(newTranslateY - lastTranslateY) > 3) {
+                    touchMoved = true;
+                }
+                translateX = newTranslateX;
+                translateY = newTranslateY;
+                updateTransform();
+            }
         } else if (e.touches.length === 2) {
+            cancelLongPress();
+            if (isDrawing) isDrawing = false;
+            isDragging = false;
+            
             const newDistance = getTouchDistance(e.touches);
             if (touchStartDistance > 0) {
                 let newScale = touchStartScale * (newDistance / touchStartDistance);
@@ -313,23 +417,23 @@
     
     function onTouchEnd(e) {
         e.preventDefault();
+        
         const wasDragging = isDragging;
+        const wasDrawing = isDrawing;
+        const wasLongPress = isLongPressing;
+        
+        cancelLongPress();
         isDragging = false;
-        if (isDrawing) isDrawing = false;
-        if (wasDragging && !touchMoved && Date.now() - touchStartTime < 200) {
-            const lastTouch = e.changedTouches[0];
-            if (lastTouch) {
-                const elements = document.elementsFromPoint(lastTouch.clientX, lastTouch.clientY);
-                for (let el of elements) {
-                    if (el.classList && el.classList.contains('pixel')) {
-                        const row = parseInt(el.dataset.row);
-                        const col = parseInt(el.dataset.col);
-                        if (!isNaN(row) && !isNaN(col)) setPixelColor(row, col, currentColor);
-                        break;
-                    }
-                }
+        isDrawing = false;
+        
+        // Короткий тап (не было движения, не было длинного нажатия)
+        if (wasDragging && !touchMoved && !wasLongPress && Date.now() - touchStartTime < 200) {
+            const pixel = getPixelUnderTouch(touchStartX, touchStartY);
+            if (pixel) {
+                setPixelColor(pixel.row, pixel.col, currentColor);
             }
         }
+        
         touchMoved = false;
         touchStartDistance = 0;
     }
@@ -469,7 +573,8 @@
         let featuresHtml = '';
         if (isMobile) {
             featuresHtml = `
-                <li>• <span>Тап по пикселю — поставить цвет</span></li>
+                <li>• <span>Короткий тап — поставить пиксель</span></li>
+                <li>• <span>Зажми палец и веди — рисовать кистью</span></li>
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
@@ -478,7 +583,7 @@
             featuresHtml = `
                 <li>• <span>ЛКМ + тащить — перемещать карту</span></li>
                 <li>• <span>Клик по пикселю — поставить цвет</span></li>
-                <li>• <span>ПКМ + вести — рисовать кистью</span></li>
+                <li>• <span>ПКМ + вести — рисовать кистью (первый пиксель сразу красится)</span></li>
                 <li>• <span>Колёсико мыши — приближать/отдалять</span></li>
                 <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
                 <li>• <span>Пробел — переключить слот</span></li>
