@@ -27,12 +27,20 @@
         @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .welcome-card h2 { font-size: 32px; margin-bottom: 12px; background: linear-gradient(135deg, #ffcc33, #ff9933); -webkit-background-clip: text; background-clip: text; color: transparent; }
         .welcome-card p { color: #ddd; font-size: 16px; margin: 12px 0; line-height: 1.5; }
-        .feature-list { text-align: left; margin: 20px 0; padding-left: 20px; list-style: none; }
+        .feature-list { text-align: left; margin: 20px 0; padding-left: 0; list-style: none; }
         .feature-list li { color: #ffaa44; margin: 10px 0; font-size: 14px; }
         .feature-list li span { color: #ccc; }
         .close-btn { background: #ff6600; border: none; color: white; padding: 12px 28px; border-radius: 40px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 16px; transition: all 0.2s; font-family: monospace; }
         .close-btn:hover { background: #ff4400; transform: scale(1.02); }
-        @media (max-width: 600px) { .welcome-card { margin: 20px; padding: 20px; } .welcome-card h2 { font-size: 24px; } .color-swatch { width: 28px; height: 28px; } .palette { gap: 6px; padding: 6px 10px; } .pixel { width: 8px; height: 8px; } .pixel-grid { grid-template-columns: repeat(150, 8px); } .slot-info { display: none; } }
+        @media (max-width: 600px) { 
+            .welcome-card { margin: 20px; padding: 20px; } 
+            .welcome-card h2 { font-size: 24px; } 
+            .color-swatch { width: 28px; height: 28px; } 
+            .palette { gap: 6px; padding: 6px 10px; } 
+            .pixel { width: 8px; height: 8px; } 
+            .pixel-grid { grid-template-columns: repeat(150, 8px); } 
+            .slot-info { display: none; } 
+        }
     </style>
 </head>
 <body>
@@ -464,8 +472,7 @@
                 <li>• <span>Тап по пикселю — поставить цвет</span></li>
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
-                <li>• <span>Нажми на квадратик слева — сохранить цвет в слот</span></li>
-                <li>• <span>Тап по квадратику — переключить слот</span></li>
+                <li>• <span>Выбирай цвет в палитре снизу</span></li>
             `;
         } else {
             featuresHtml = `
@@ -475,6 +482,7 @@
                 <li>• <span>Колёсико мыши — приближать/отдалять</span></li>
                 <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
                 <li>• <span>Пробел — переключить слот</span></li>
+                <li>• <span>Клик по цвету в палитре — выбрать цвет</span></li>
             `;
         }
         featureList.innerHTML = featuresHtml;
