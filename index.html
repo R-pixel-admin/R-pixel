@@ -14,7 +14,15 @@
         .canvas-wrapper:active { cursor: grabbing; }
         .pixel-grid { display: grid; grid-template-columns: repeat(150, 12px); background-color: #1e212b; border: 1px solid #2e2f3e; }
         .pixel { width: 12px; height: 12px; background-color: #2b2b2b; }
-        .palette { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 8px 12px; background: #1e1f2ccc; backdrop-filter: blur(8px); border-radius: 16px; z-index: 100; pointer-events: auto; }
+        .palette-container { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 100; }
+        .cooldown-bar-wrapper { width: 300px; height: 40px; background: #1e1f2c; border-radius: 20px; overflow: hidden; position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.5); border: 1px solid #3a3f55; }
+        .cooldown-bar-fill { position: absolute; top: 0; height: 100%; background: linear-gradient(90deg, #ff6600, #ffaa33); width: 100%; border-radius: 20px; transform-origin: center; transform: scaleX(1); transition: transform 0.1s linear; }
+        .cooldown-bar-left { position: absolute; top: 0; left: 0; height: 100%; width: 50%; overflow: hidden; border-radius: 20px 0 0 20px; }
+        .cooldown-bar-right { position: absolute; top: 0; right: 0; height: 100%; width: 50%; overflow: hidden; border-radius: 0 20px 20px 0; }
+        .cooldown-bar-left .cooldown-bar-fill { right: 0; transform-origin: right center; }
+        .cooldown-bar-right .cooldown-bar-fill { left: 0; transform-origin: left center; }
+        .cooldown-timer-center { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: bold; text-shadow: 0 0 5px black; z-index: 2; font-family: monospace; pointer-events: none; }
+        .palette { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 8px 12px; background: #1e1f2ccc; backdrop-filter: blur(8px); border-radius: 16px; pointer-events: auto; }
         .color-swatch { width: 36px; height: 36px; border-radius: 8px; cursor: pointer; border: 2px solid #fff; }
         .color-swatch.active { border: 3px solid #ff0; transform: scale(1.05); }
         .zoom-info { position: fixed; top: 16px; right: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 16px; color: white; font-size: 14px; z-index: 100; pointer-events: none; }
@@ -32,10 +40,6 @@
         .feature-list li span { color: #ccc; }
         .close-btn { background: #ff6600; border: none; color: white; padding: 12px 28px; border-radius: 40px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 16px; transition: all 0.2s; font-family: monospace; }
         .close-btn:hover { background: #ff4400; transform: scale(1.02); }
-        .cooldown-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); z-index: 300; display: flex; justify-content: center; align-items: center; flex-direction: column; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
-        .cooldown-overlay.active { opacity: 1; pointer-events: auto; }
-        .cooldown-timer { font-size: 120px; font-weight: bold; color: #ff6600; text-shadow: 0 0 20px rgba(255,102,0,0.5); font-family: monospace; letter-spacing: 10px; }
-        .cooldown-text { font-size: 24px; color: white; margin-top: 20px; font-family: monospace; }
         @media (max-width: 600px) { 
             .welcome-card { margin: 20px; padding: 20px; } 
             .welcome-card h2 { font-size: 24px; } 
@@ -44,8 +48,8 @@
             .pixel { width: 8px; height: 8px; } 
             .pixel-grid { grid-template-columns: repeat(150, 8px); } 
             .slot-info { display: none; } 
-            .cooldown-timer { font-size: 80px; letter-spacing: 5px; }
-            .cooldown-text { font-size: 18px; }
+            .cooldown-bar-wrapper { width: 260px; height: 36px; }
+            .cooldown-timer-center { font-size: 16px; }
         }
     </style>
 </head>
@@ -55,12 +59,23 @@
         <div class="pixel-grid" id="pixelGrid"></div>
     </div>
 </div>
-<div class="palette" id="colorPalette"></div>
 <div class="zoom-info" id="zoomInfo">zoom: 1x</div>
 <div class="slot-info" id="slotInfo">
     <span class="slot-label">🎨</span>
     <span id="slot1Color"></span>
     <span id="slot2Color"></span>
+</div>
+<div class="palette-container">
+    <div class="cooldown-bar-wrapper" id="cooldownWrapper" style="display: none;">
+        <div class="cooldown-bar-left">
+            <div class="cooldown-bar-fill" id="cooldownFillLeft"></div>
+        </div>
+        <div class="cooldown-bar-right">
+            <div class="cooldown-bar-fill" id="cooldownFillRight"></div>
+        </div>
+        <div class="cooldown-timer-center" id="cooldownTimer">10</div>
+    </div>
+    <div class="palette" id="colorPalette"></div>
 </div>
 
 <div id="welcomeOverlay" class="welcome-overlay">
@@ -72,11 +87,6 @@
         </ul>
         <button class="close-btn" id="closeWelcome">ПРИСТУПИТЬ</button>
     </div>
-</div>
-
-<div id="cooldownOverlay" class="cooldown-overlay">
-    <div class="cooldown-timer" id="cooldownTimer">10</div>
-    <div class="cooldown-text">секунд до следующей покраски</div>
 </div>
 
 <script>
@@ -117,8 +127,10 @@
     const zoomInfo = document.getElementById("zoomInfo");
     const slot1Span = document.getElementById("slot1Color");
     const slot2Span = document.getElementById("slot2Color");
-    const cooldownOverlay = document.getElementById("cooldownOverlay");
-    const cooldownTimerEl = document.getElementById("cooldownTimer");
+    const cooldownWrapper = document.getElementById("cooldownWrapper");
+    const cooldownTimer = document.getElementById("cooldownTimer");
+    const cooldownFillLeft = document.getElementById("cooldownFillLeft");
+    const cooldownFillRight = document.getElementById("cooldownFillRight");
     
     let scale = 1;
     let translateX = 0;
@@ -139,21 +151,29 @@
     
     const isMobile = window.innerWidth <= 600 || ('ontouchstart' in window);
     
+    function updateCooldownBar(remaining) {
+        const percent = remaining / COOLDOWN_SECONDS;
+        const scaleX = percent;
+        cooldownFillLeft.style.transform = `scaleX(${scaleX})`;
+        cooldownFillRight.style.transform = `scaleX(${scaleX})`;
+        cooldownTimer.innerText = remaining;
+    }
+    
     function startCooldown() {
         if (cooldownInterval) clearInterval(cooldownInterval);
         isOnCooldown = true;
         let remaining = COOLDOWN_SECONDS;
-        cooldownTimerEl.innerText = remaining;
-        cooldownOverlay.classList.add("active");
+        cooldownWrapper.style.display = "block";
+        updateCooldownBar(remaining);
         
         cooldownInterval = setInterval(() => {
             remaining--;
-            cooldownTimerEl.innerText = remaining;
+            updateCooldownBar(remaining);
             if (remaining <= 0) {
                 clearInterval(cooldownInterval);
                 cooldownInterval = null;
                 isOnCooldown = false;
-                cooldownOverlay.classList.remove("active");
+                cooldownWrapper.style.display = "none";
             }
         }, 1000);
     }
@@ -567,7 +587,7 @@
                 <li>• <span>Один палец — перемещать карту</span></li>
                 <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
-                <li>• <span>⏱️ 10 секунд кулдаун между покрасками</span></li>
+                <li>• <span>⏱️ 10 секунд между покрасками</span></li>
             `;
         } else {
             featuresHtml = `
@@ -578,7 +598,7 @@
                 <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
                 <li>• <span>Пробел — переключить слот</span></li>
                 <li>• <span>Клик по цвету в палитре — выбрать цвет</span></li>
-                <li>• <span>⏱️ 10 секунд кулдаун между покрасками</span></li>
+                <li>• <span>⏱️ 10 секунд между покрасками</span></li>
             `;
         }
         featureList.innerHTML = featuresHtml;
