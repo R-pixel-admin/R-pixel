@@ -22,10 +22,6 @@
         .color-swatch { width: 36px; height: 36px; border-radius: 8px; cursor: pointer; border: 2px solid #fff; }
         .color-swatch.active { border: 3px solid #ff0; transform: scale(1.05); }
         .zoom-info { position: fixed; top: 16px; right: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 16px; color: white; font-size: 14px; z-index: 100; pointer-events: none; }
-        .slot-info { position: fixed; bottom: 80px; left: 16px; background: #1e1f2ccc; backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 16px; color: white; font-size: 12px; z-index: 100; font-family: monospace; pointer-events: auto; }
-        .slot-info span { display: inline-block; width: 28px; height: 28px; border-radius: 6px; margin: 0 4px; vertical-align: middle; border: 2px solid #fff; cursor: pointer; }
-        .slot-info .slot-label { display: inline-block; margin: 0 6px 0 0; cursor: default; }
-        .slot-info .active-slot { border: 2px solid #ff0; box-shadow: 0 0 6px #ff0; }
         .welcome-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 200; display: flex; justify-content: center; align-items: center; transition: opacity 0.3s ease; }
         .welcome-card { background: linear-gradient(135deg, #1e1f2c, #14161f); border-radius: 24px; padding: 24px 32px; max-width: 420px; text-align: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5); animation: popIn 0.4s cubic-bezier(0.34, 1.2, 0.64, 1); }
         @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -43,7 +39,6 @@
             .palette { gap: 6px; padding: 6px 10px; } 
             .pixel { width: 8px; height: 8px; } 
             .pixel-grid { grid-template-columns: repeat(150, 8px); } 
-            .slot-info { display: none; } 
             .palette-container { min-width: 280px; }
             .cooldown-bar-wrapper { width: 260px; height: 36px; }
             .cooldown-timer-center { font-size: 16px; }
@@ -57,11 +52,6 @@
     </div>
 </div>
 <div class="zoom-info" id="zoomInfo">zoom: 1x</div>
-<div class="slot-info" id="slotInfo">
-    <span class="slot-label">🎨</span>
-    <span id="slot1Color"></span>
-    <span id="slot2Color"></span>
-</div>
 <div class="palette-container">
     <div class="cooldown-bar-wrapper" id="cooldownWrapper" style="display: none;">
         <div class="cooldown-bar-fill" id="cooldownFill"></div>
@@ -102,11 +92,7 @@
     const COOLDOWN_SECONDS = 10;
     const COLOR_PALETTE = ["#2b2b2b","#8b3c2c","#d64531","#e8b84c","#6aa84f","#3b6e4b","#2c5e6e","#4c76b0","#6f4f8c","#bc85a3","#d4c4a8","#f7f3e0"];
     let pixelData = new Array(TOTAL_PIXELS).fill(COLOR_PALETTE[0]);
-    let currentColor = COLOR_PALETTE[1];
-    
-    let slot1Color = COLOR_PALETTE[5];
-    let slot2Color = COLOR_PALETTE[7];
-    let activeSlot = 1;
+    let currentColor = COLOR_PALETTE[0];
     
     let gridRendered = false;
     let isOnCooldown = false;
@@ -117,8 +103,6 @@
     const canvasWrapper = document.getElementById("canvasWrapper");
     const mapContainer = document.getElementById("mapContainer");
     const zoomInfo = document.getElementById("zoomInfo");
-    const slot1Span = document.getElementById("slot1Color");
-    const slot2Span = document.getElementById("slot2Color");
     const cooldownWrapper = document.getElementById("cooldownWrapper");
     const cooldownTimer = document.getElementById("cooldownTimer");
     const cooldownFill = document.getElementById("cooldownFill");
@@ -132,7 +116,6 @@
     let lastTranslateX = 0;
     let lastTranslateY = 0;
     let hasMoved = false;
-    let isDrawing = false;
     
     let touchStartTime = 0;
     let touchMoved = false;
@@ -144,8 +127,7 @@
     
     function updateCooldownBar(remaining) {
         const percent = remaining / COOLDOWN_SECONDS;
-        const scaleX = percent;
-        cooldownFill.style.transform = `scaleX(${scaleX})`;
+        cooldownFill.style.transform = `scaleX(${percent})`;
         cooldownTimer.innerText = remaining;
     }
     
@@ -201,49 +183,6 @@
         updateTransform();
     }
     
-    function updateSlotsDisplay() {
-        slot1Span.style.backgroundColor = slot1Color;
-        slot2Span.style.backgroundColor = slot2Color;
-        if (activeSlot === 1) {
-            slot1Span.classList.add("active-slot");
-            slot2Span.classList.remove("active-slot");
-        } else {
-            slot1Span.classList.remove("active-slot");
-            slot2Span.classList.add("active-slot");
-        }
-    }
-    
-    function switchSlot() {
-        activeSlot = activeSlot === 1 ? 2 : 1;
-        currentColor = activeSlot === 1 ? slot1Color : slot2Color;
-        updateSlotsDisplay();
-        updateActiveSwatch();
-    }
-    
-    function setSlot1() {
-        slot1Color = currentColor;
-        activeSlot = 1;
-        currentColor = slot1Color;
-        updateSlotsDisplay();
-        updateActiveSwatch();
-    }
-    
-    function setSlot2() {
-        slot2Color = currentColor;
-        activeSlot = 2;
-        currentColor = slot2Color;
-        updateSlotsDisplay();
-        updateActiveSwatch();
-    }
-    
-    function onKeyDown(e) {
-        if (isMobile) return;
-        const key = e.key;
-        if (key === '1') { e.preventDefault(); setSlot1(); }
-        else if (key === '2') { e.preventDefault(); setSlot2(); }
-        else if (key === ' ') { e.preventDefault(); switchSlot(); }
-    }
-    
     function updateActiveSwatch() {
         const swatches = document.querySelectorAll(".color-swatch");
         swatches.forEach(el => {
@@ -273,18 +212,6 @@
             translateX = newTranslateX;
             translateY = newTranslateY;
             updateTransform();
-        } else if (isDrawing && !isMobile) {
-            const elements = document.elementsFromPoint(e.clientX, e.clientY);
-            for (let el of elements) {
-                if (el.classList && el.classList.contains('pixel')) {
-                    const row = parseInt(el.dataset.row);
-                    const col = parseInt(el.dataset.col);
-                    if (!isNaN(row) && !isNaN(col)) {
-                        setPixelColor(row, col, currentColor);
-                    }
-                    break;
-                }
-            }
         }
     }
     
@@ -293,30 +220,9 @@
             isDragging = false;
             canvasWrapper.style.cursor = "grab";
         }
-        if (isDrawing) isDrawing = false;
     }
     
     function onContextMenu(e) { e.preventDefault(); return false; }
-    
-    function onRightMouseDown(e) {
-        if (isMobile) return;
-        if (e.button === 2) {
-            isDrawing = true;
-            const elements = document.elementsFromPoint(e.clientX, e.clientY);
-            for (let el of elements) {
-                if (el.classList && el.classList.contains('pixel')) {
-                    const row = parseInt(el.dataset.row);
-                    const col = parseInt(el.dataset.col);
-                    if (!isNaN(row) && !isNaN(col)) {
-                        setPixelColor(row, col, currentColor);
-                    }
-                    break;
-                }
-            }
-            e.preventDefault();
-            return false;
-        }
-    }
     
     function onWheel(e) {
         e.preventDefault();
@@ -339,7 +245,6 @@
     
     let touchStartDistance = 0;
     let touchStartScale = 1;
-    let initialPinchX = 0, initialPinchY = 0;
     
     function getTouchDistance(touches) {
         const dx = touches[0].clientX - touches[1].clientX;
@@ -360,7 +265,7 @@
             if (el.classList && el.classList.contains('pixel')) {
                 const row = parseInt(el.dataset.row);
                 const col = parseInt(el.dataset.col);
-                if (!isNaN(row) && !isNaN(col)) return { row, col, element: el };
+                if (!isNaN(row) && !isNaN(col)) return { row, col };
             }
         }
         return null;
@@ -381,12 +286,8 @@
             lastTranslateY = translateY;
         } else if (e.touches.length === 2) {
             isDragging = false;
-            isDrawing = false;
             touchStartDistance = getTouchDistance(e.touches);
             touchStartScale = scale;
-            const center = getTouchCenter(e.touches);
-            initialPinchX = (center.x - translateX) / scale;
-            initialPinchY = (center.y - translateY) / scale;
         }
     }
     
@@ -398,20 +299,13 @@
             const currentY = e.touches[0].clientY;
             const dx = Math.abs(currentX - touchStartX);
             const dy = Math.abs(currentY - touchStartY);
+            if (dx > 5 || dy > 5) touchMoved = true;
             
-            if (dx > 5 || dy > 5) {
-                touchMoved = true;
-            }
-            
-            const newTranslateX = e.touches[0].clientX - dragStartX;
-            const newTranslateY = e.touches[0].clientY - dragStartY;
-            translateX = newTranslateX;
-            translateY = newTranslateY;
+            translateX = e.touches[0].clientX - dragStartX;
+            translateY = e.touches[0].clientY - dragStartY;
             updateTransform();
         } else if (e.touches.length === 2) {
-            if (isDrawing) isDrawing = false;
             isDragging = false;
-            
             const newDistance = getTouchDistance(e.touches);
             if (touchStartDistance > 0) {
                 let newScale = touchStartScale * (newDistance / touchStartDistance);
@@ -433,12 +327,10 @@
     
     function onTouchEnd(e) {
         e.preventDefault();
-        
         const wasDragging = isDragging;
         const now = Date.now();
         
         isDragging = false;
-        isDrawing = false;
         
         if (wasDragging && !touchMoved && (now - touchStartTime) < 200) {
             if (now - lastTapTime > tapDebounce) {
@@ -455,16 +347,14 @@
     }
     
     mapContainer.addEventListener("mousedown", onMouseDown);
-    mapContainer.addEventListener("mousemove", onMouseMove);
-    mapContainer.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
     mapContainer.addEventListener("wheel", onWheel, { passive: false });
     mapContainer.addEventListener("contextmenu", onContextMenu);
-    mapContainer.addEventListener("mousedown", onRightMouseDown);
     mapContainer.addEventListener("touchstart", onTouchStart, { passive: false });
     mapContainer.addEventListener("touchmove", onTouchMove, { passive: false });
     mapContainer.addEventListener("touchend", onTouchEnd);
     mapContainer.addEventListener("touchcancel", onTouchEnd);
-    window.addEventListener("keydown", onKeyDown);
     
     function getPixelId(row, col) { return `${row}_${col}`; }
     function parseIdToCoords(id) { const [row, col] = id.split("_").map(Number); return { row, col }; }
@@ -483,26 +373,18 @@
                 pixel.style.height = `${PIXEL_SIZE}px`;
                 pixel.dataset.row = row;
                 pixel.dataset.col = col;
-                
                 pixel.addEventListener("click", (e) => {
                     e.stopPropagation();
                     if (hasMoved) return;
                     setPixelColor(row, col, currentColor);
                 });
-                
-                if (!isMobile) {
-                    pixel.addEventListener("mouseenter", () => {
-                        if (isDrawing) setPixelColor(row, col, currentColor);
-                    });
-                }
-                
                 gridContainer.appendChild(pixel);
             }
             gridRendered = true;
         }
         for (let i = 0; i < TOTAL_PIXELS; i++) {
             const pixelDiv = gridContainer.children[i];
-            if (pixelDiv) pixelDiv.style.backgroundColor = pixelData[i] || COLOR_PALETTE[0];
+            if (pixelDiv) pixelDiv.style.backgroundColor = pixelData[i];
         }
     }
     
@@ -524,8 +406,7 @@
                     if (typeof colorValue === "string" && colorValue.length > 0) {
                         const { row, col } = parseIdToCoords(pixelId);
                         if (!isNaN(row) && !isNaN(col) && row >= 0 && row < SIZE && col >= 0 && col < SIZE) {
-                            const idx = row * SIZE + col;
-                            pixelData[idx] = colorValue;
+                            pixelData[row * SIZE + col] = colorValue;
                         }
                     }
                 }
@@ -538,9 +419,7 @@
             const newColor = snapshot.val();
             if (pixelId && newColor && typeof newColor === "string") {
                 const { row, col } = parseIdToCoords(pixelId);
-                if (!isNaN(row) && !isNaN(col) && row >= 0 && row < SIZE && col >= 0 && col < SIZE) {
-                    updatePixelUI(row, col, newColor);
-                }
+                if (!isNaN(row) && !isNaN(col)) updatePixelUI(row, col, newColor);
             }
         });
         
@@ -549,23 +428,17 @@
             const newColor = snapshot.val();
             if (pixelId && newColor && typeof newColor === "string") {
                 const { row, col } = parseIdToCoords(pixelId);
-                if (!isNaN(row) && !isNaN(col) && row >= 0 && row < SIZE && col >= 0 && col < SIZE) {
-                    updatePixelUI(row, col, newColor);
-                }
+                if (!isNaN(row) && !isNaN(col)) updatePixelUI(row, col, newColor);
             }
         });
     }
     
     async function setPixelColor(row, col, colorHex) {
         if (isOnCooldown) return;
-        
         const pixelId = getPixelId(row, col);
-        const currentColorAtPixel = pixelData[row * SIZE + col];
-        if (currentColorAtPixel === colorHex) return;
-        
+        if (pixelData[row * SIZE + col] === colorHex) return;
         updatePixelUI(row, col, colorHex);
-        try { await db.ref(`pixels/${pixelId}`).set(colorHex); } catch(err) { console.warn(err); }
-        
+        try { await db.ref(`pixels/${pixelId}`).set(colorHex); } catch(e) {}
         startCooldown();
     }
     
@@ -595,27 +468,24 @@
             featuresHtml = `
                 <li>• <span>Тап по пикселю — поставить цвет</span></li>
                 <li>• <span>Один палец — перемещать карту</span></li>
-                <li>• <span>Два пальца (щипок) — приближать/отдалять</span></li>
+                <li>• <span>Два пальца — приближать/отдалять</span></li>
                 <li>• <span>Выбирай цвет в палитре снизу</span></li>
-                <li>• <span>⏱️ 10 секунд между покрасками (сохраняется после перезагрузки)</span></li>
+                <li>• <span>⏱️ 10 секунд кулдаун (сохраняется после перезагрузки)</span></li>
             `;
         } else {
             featuresHtml = `
                 <li>• <span>ЛКМ + тащить — перемещать карту</span></li>
                 <li>• <span>Клик по пикселю — поставить цвет</span></li>
-                <li>• <span>ПКМ + вести — рисовать кистью</span></li>
                 <li>• <span>Колёсико мыши — приближать/отдалять</span></li>
-                <li>• <span>1 / 2 — сохранить цвет в слот</span></li>
-                <li>• <span>Пробел — переключить слот</span></li>
                 <li>• <span>Клик по цвету в палитре — выбрать цвет</span></li>
-                <li>• <span>⏱️ 10 секунд между покрасками (сохраняется после перезагрузки)</span></li>
+                <li>• <span>⏱️ 10 секунд кулдаун (сохраняется после перезагрузки)</span></li>
             `;
         }
         featureList.innerHTML = featuresHtml;
         
         function closePopup() {
             overlay.style.opacity = '0';
-            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+            setTimeout(() => overlay.style.display = 'none', 300);
         }
         closeBtn.addEventListener('click', closePopup);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopup(); });
@@ -627,11 +497,7 @@
         centerCanvas();
         canvasWrapper.style.cursor = "grab";
         initWelcomePopup();
-        updateSlotsDisplay();
         checkCooldownOnLoad();
-        
-        slot1Span.addEventListener('click', () => setSlot1());
-        slot2Span.addEventListener('click', () => setSlot2());
     }
     
     window.addEventListener("resize", () => centerCanvas());
